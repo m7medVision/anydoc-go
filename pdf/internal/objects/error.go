@@ -258,6 +258,30 @@ func contains(s, sub string) bool {
 	return false
 }
 
+// IsInvalidFileHeader reports whether err is Parse(InvalidFileHeader), the
+// case pdf-inspector maps to PdfError::NotAPdf.
+func IsInvalidFileHeader(err error) bool {
+	e, ok := err.(*Error)
+	if !ok || e.Kind != KindParse || e.Inner == nil {
+		return false
+	}
+	return contains(e.Inner.Error(), "invalid file header")
+}
+
+// IsInvalidStructure reports whether err is one of the variants pdf-inspector
+// maps to PdfError::InvalidStructure.
+func IsInvalidStructure(err error) bool {
+	e, ok := err.(*Error)
+	if !ok {
+		return false
+	}
+	switch e.Kind {
+	case KindMissingXrefEntry, KindXref, KindIndirectObject, KindObjectIdMismatch, KindInvalidObjectStream, KindInvalidOffset:
+		return true
+	}
+	return false
+}
+
 func hasKind(err error, kind ErrKind) bool {
 	switch e := err.(type) {
 	case *Error:

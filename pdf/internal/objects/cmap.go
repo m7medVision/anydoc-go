@@ -48,8 +48,13 @@ func (m *bfRangeMap) insert(lo, hi uint32, target bfRangeTarget) {
 			newAfter = append(newAfter, bfRange{Lo: hi + 1, Hi: r.Hi, Target: r.Target})
 		}
 	}
-	m.ranges = append(append(append(kept[:0:0], newBefore...), append([]bfRange{{Lo: lo, Hi: hi, Target: target}}, newAfter...)...))
-	sort.Slice(m.ranges, func(i, j int) bool { return m.ranges[i].Lo < m.ranges[j].Lo })
+	out := make([]bfRange, 0, len(kept)+len(newBefore)+1+len(newAfter))
+	out = append(out, kept...)
+	out = append(out, newBefore...)
+	out = append(out, bfRange{Lo: lo, Hi: hi, Target: target})
+	out = append(out, newAfter...)
+	sort.Slice(out, func(i, j int) bool { return out[i].Lo < out[j].Lo })
+	m.ranges = out
 }
 
 // getKeyValue finds the range containing code.

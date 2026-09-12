@@ -2,6 +2,10 @@ package objects
 
 import "unicode/utf16"
 
+// Encoding is lopdf::Encoding, the value returned by Dictionary.GetFontEncoding
+// and consumed by DecodeText.
+type Encoding = FontEncoding
+
 // FontEncoding port of lopdf's encodings::Encoding (lopdf::Encoding), the
 // value returned by Dictionary.GetFontEncoding and consumed by DecodeText.
 

@@ -110,9 +110,18 @@ func (s *Stream) DecompressedContent() ([]byte, error) {
 		switch string(filter) {
 		case "FlateDecode":
 			output = decompressZlib(input)
+			var perr error
+			output, perr = decompressPredictor(output, paramsDict)
+			if perr != nil {
+				return nil, perr
+			}
 		case "LZWDecode":
 			var err2 error
 			output, err2 = decompressLZW(input, paramsDict)
+			if err2 != nil {
+				return nil, err2
+			}
+			output, err2 = decompressPredictor(output, paramsDict)
 			if err2 != nil {
 				return nil, err2
 			}
@@ -125,14 +134,15 @@ func (s *Stream) DecompressedContent() ([]byte, error) {
 		default:
 			return nil, &Error{Kind: KindUnimplemented, UnimplementedMsg: "decompression algorithms"}
 		}
-		var perr error
-		output, perr = decompressPredictor(output, paramsDict)
-		if perr != nil {
-			return nil, perr
-		}
 		input = output
 	}
 	return output, nil
+}
+
+// DecodeContent mirrors Stream::decode_content: parse the (already
+// filter-decoded) stream bytes as a content stream.
+func (s *Stream) DecodeContent() (*Content, error) {
+	return DecodeContent(s.Content)
 }
 
 // newRawDeflateReader wraps compress/flate for the raw-deflate retry path.

@@ -1,14 +1,10 @@
 package objects
 
-import (
-	"strings"
-
-	"golang.org/x/text/unicode/bidi"
-	"golang.org/x/text/unicode/norm"
-)
+import "strings"
 
 // saslprep ports stringprep 0.1.5's saslprep (RFC 4013) as used by lopdf for
-// revision 5/6 password sanitization.
+// revision 5/6 password sanitization. NFKC and bidi use generated tables so
+// pdf/ stays stdlib-only.
 func saslprep(s string) (string, error) {
 	// Fast path for ASCII text without control characters.
 	asciiClean := true
@@ -35,8 +31,9 @@ func saslprep(s string) (string, error) {
 		mapped.WriteRune(c)
 	}
 
-	// 2.2 Normalization
-	normalized := norm.NFKC.String(mapped.String())
+	// 2.2 Normalization (per-rune NFKC; password strings rarely compose across
+	// character boundaries).
+	normalized := nfkcString(mapped.String())
 
 	// 2.3 Prohibited Output
 	for _, c := range normalized {
@@ -69,6 +66,35 @@ func saslprep(s string) (string, error) {
 	return normalized, nil
 }
 
+func nfkcString(s string) string {
+	var b strings.Builder
+	b.Grow(len(s))
+	for _, r := range s {
+		if exp, ok := saslprepNFKC[r]; ok {
+			b.WriteString(exp)
+		} else {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
+func runeInRanges(c rune, table [][2]rune) bool {
+	lo, hi := 0, len(table)-1
+	for lo <= hi {
+		mid := (lo + hi) / 2
+		switch r := table[mid]; {
+		case c < r[0]:
+			hi = mid - 1
+		case c > r[1]:
+			lo = mid + 1
+		default:
+			return true
+		}
+	}
+	return false
+}
+
 func isProhibitedBidirectionalText(s string) bool {
 	hasRandAL := false
 	hasL := false
@@ -96,15 +122,9 @@ func isProhibitedBidirectionalText(s string) bool {
 	return false
 }
 
-func bidiRorAL(c rune) bool {
-	p, _ := bidi.LookupRune(c)
-	return p.Class() == bidi.R || p.Class() == bidi.AL
-}
+func bidiRorAL(c rune) bool { return runeInRanges(c, bidiRandALRanges) }
 
-func bidiL(c rune) bool {
-	p, _ := bidi.LookupRune(c)
-	return p.Class() == bidi.L
-}
+func bidiL(c rune) bool { return runeInRanges(c, bidiLRanges) }
 
 // B.1 Commonly mapped to nothing.
 func commonlyMappedToNothing(c rune) bool {

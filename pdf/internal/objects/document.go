@@ -27,6 +27,20 @@ func newDocument() *Document {
 	}
 }
 
+// New mirrors Document::new.
+func New() *Document { return newDocument() }
+
+// WithVersion mirrors Document::with_version.
+func WithVersion(version string) *Document {
+	d := newDocument()
+	d.Version = version
+	return d
+}
+
+// Objects returns the document object map (lopdf's public `objects` BTreeMap).
+// Callers that would write `doc.objects.insert(id, obj)` use SetObject.
+func (d *Document) Objects() map[ObjectId]*Object { return d.objects }
+
 // setObject inserts or replaces an object.
 func (d *Document) setObject(id ObjectId, obj Object) {
 	if _, ok := d.objects[id]; !ok {

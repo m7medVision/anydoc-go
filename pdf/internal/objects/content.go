@@ -6,6 +6,11 @@ type Operation struct {
 	Operands []Object
 }
 
+// NewOperation mirrors Operation::new.
+func NewOperation(operator string, operands []Object) Operation {
+	return Operation{Operator: operator, Operands: operands}
+}
+
 type Content struct {
 	Operations []Operation
 }

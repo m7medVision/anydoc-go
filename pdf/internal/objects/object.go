@@ -1,3 +1,8 @@
+// Package objects is the PDF object layer pdf-inspector builds on: lopdf's
+// role as an internal engine detail. Load from bytes, the object model,
+// xref (including incremental/hybrid repair), stream filters the engine
+// uses, font encodings, and encryption detection (plus the decrypt path
+// LoadMemWithOptions needs when a password is supplied).
 package objects
 
 import "strconv"
@@ -222,7 +227,10 @@ func (o *Object) String() string {
 	case KindDictionary:
 		return o.Dict.String()
 	case KindStream:
-		return o.Dict.String() + "stream...endstream"
+		if o.Stream != nil {
+			return o.Stream.Dict.String() + "stream...endstream"
+		}
+		return "stream...endstream"
 	case KindReference:
 		return itoa(int64(o.Ref.Num)) + " " + itoa(int64(o.Ref.Gen)) + " R"
 	}

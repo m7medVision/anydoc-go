@@ -1,7 +1,5 @@
 package objects
 
-import "sort"
-
 // Dictionary mirrors lopdf::Dictionary (an insertion-ordered IndexMap keyed by
 // raw name bytes). The zero value is an empty dictionary ready for use.
 type Dictionary struct {
@@ -190,20 +188,4 @@ func (d *Dictionary) String() string {
 		return true
 	})
 	return s + ">>"
-}
-
-// sortedKeysSortedNames is a helper for maps keyed by raw name bytes that
-// upstream stores in BTreeMap (ascending byte order iteration).
-func sortedByteKeys(keys [][]byte) [][]byte {
-	out := append([][]byte(nil), keys...)
-	sort.Slice(out, func(i, j int) bool {
-		a, b := out[i], out[j]
-		for k := 0; k < len(a) && k < len(b); k++ {
-			if a[k] != b[k] {
-				return a[k] < b[k]
-			}
-		}
-		return len(a) < len(b)
-	})
-	return out
 }

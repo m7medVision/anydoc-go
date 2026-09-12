@@ -12,15 +12,18 @@ import (
 // LoadOptions mirrors lopdf::LoadOptions. The zero value is the default
 // (lenient, no password).
 type LoadOptions struct {
-	// Password for encrypted PDFs ("" = none).
+	// Password for encrypted PDFs. Meaningful only when HasPassword is true
+	// (lopdf's Option<String>: Some("") is not the same as None).
 	Password string
+	// HasPassword is true when a password was supplied, including empty.
+	HasPassword bool
 	// Strict rejects non-conforming PDFs instead of accepting them.
 	Strict bool
 }
 
 // WithPassword mirrors LoadOptions::with_password.
 func WithPassword(password string) LoadOptions {
-	return LoadOptions{Password: password}
+	return LoadOptions{Password: password, HasPassword: true}
 }
 
 // LoadMem mirrors Document::load_mem.
@@ -31,10 +34,11 @@ func LoadMem(buffer []byte) (*Document, error) {
 // LoadMemWithOptions mirrors Document::load_mem_with_options.
 func LoadMemWithOptions(buffer []byte, options LoadOptions) (*Document, error) {
 	r := &reader{
-		buffer:   buffer,
-		document: newDocument(),
-		password: options.Password,
-		strict:   options.Strict,
+		buffer:      buffer,
+		document:    newDocument(),
+		password:    options.Password,
+		hasPassword: options.HasPassword,
+		strict:      options.Strict,
 	}
 	return r.read()
 }
@@ -100,7 +104,7 @@ func (r *reader) read() (*Document, error) {
 
 	// Read previous xrefs of linearized or incrementally updated documents.
 	alreadySeen := map[int64]bool{}
-	prevXrefStart := trailer.Remove([]byte("Prev"))
+	prevXrefStart, _ := trailer.Remove([]byte("Prev"))
 	for {
 		prev, hasPrev := int64(0), false
 		if prevXrefStart != nil {
@@ -126,7 +130,7 @@ func (r *reader) read() (*Document, error) {
 		xref.Merge(prevXref)
 
 		// Read xref stream in hybrid-reference file.
-		if stm := trailer.Remove([]byte("XRefStm")); stm != nil {
+		if stm, ok := trailer.Remove([]byte("XRefStm")); ok && stm != nil {
 			if v, err := stm.AsI64(); err == nil {
 				if v < 0 || int(v) > len(r.buffer) {
 					return nil, &Error{Kind: KindXref, Inner: XrefErrStreamStart}

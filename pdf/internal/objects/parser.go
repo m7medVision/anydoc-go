@@ -337,14 +337,14 @@ func pBoolean(in []byte) ([]byte, Object, bool) {
 	if hasPrefix(in, "false") {
 		return in[5:], Boolean(false), true
 	}
-	return in, nil, false
+	return in, Object{}, false
 }
 
 func pNull(in []byte) ([]byte, Object, bool) {
 	if hasPrefix(in, "null") {
 		return in[4:], Null(), true
 	}
-	return in, nil, false
+	return in, Object{}, false
 }
 
 func pArray(in []byte, depth int) ([]byte, []Object, bool) {
@@ -418,7 +418,7 @@ func pObjectId(in []byte) ([]byte, ObjectId, bool) {
 func pReference(in []byte) ([]byte, Object, bool) {
 	rest, id, ok := pObjectId(in)
 	if !ok || !hasPrefix(rest, "R") {
-		return in, nil, false
+		return in, Object{}, false
 	}
 	return rest[1:], Reference(id), true
 }
@@ -461,7 +461,7 @@ func pDirectObjects(in []byte, depth int) ([]byte, Object, bool) {
 // pDirectObject mirrors _direct_object: depth guard + trailing space.
 func pDirectObject(in []byte, depth int) ([]byte, Object, bool) {
 	if depth == 0 {
-		return in, nil, false
+		return in, Object{}, false
 	}
 	rest, o, ok := pDirectObjects(in, depth-1)
 	if !ok {
@@ -556,7 +556,7 @@ func parseIndirectObject(
 ) (ObjectId, Object, error) {
 	id, obj, err := parseIndirectObjectRaw(in, offset, expectedID, reader, alreadySeen)
 	if err != nil {
-		return id, nil, err
+		return id, Object{}, err
 	}
 	offsetStream(&obj, offset)
 	return id, obj, nil
@@ -574,18 +574,18 @@ func parseIndirectObjectRaw(
 	rest := pSpace(in)
 	idRest, id, ok := pObjectId(rest)
 	if !ok {
-		return ObjectId{}, nil, &Error{Kind: KindIndirectObject, Offset: offset}
+		return ObjectId{}, Object{}, &Error{Kind: KindIndirectObject, Offset: offset}
 	}
 	if !hasPrefix(idRest, "obj") {
-		return ObjectId{}, nil, &Error{Kind: KindIndirectObject, Offset: offset}
+		return ObjectId{}, Object{}, &Error{Kind: KindIndirectObject, Offset: offset}
 	}
 	afterObj := pSpace(idRest[len("obj"):])
 	if expectedID != nil && id != *expectedID {
-		return ObjectId{}, nil, ErrObjectIdMismatch
+		return ObjectId{}, Object{}, ErrObjectIdMismatch
 	}
 	objRest, obj, ok := pObject(afterObj, reader, alreadySeen)
 	if !ok {
-		return ObjectId{}, nil, &Error{Kind: KindIndirectObject, Offset: offset}
+		return ObjectId{}, Object{}, &Error{Kind: KindIndirectObject, Offset: offset}
 	}
 	// (space, opt("endobj"), space) — both many0-spaces, never fail.
 	if hasPrefix(objRest, "endobj") {
