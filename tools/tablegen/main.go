@@ -279,6 +279,9 @@ func genKorea1(src, dst string) error {
 
 // ─── structure_tree.rs ────────────────────────────────────────────────────────
 
+// knownNameRe matches a KNOWN_NAMES entry: b"Document",
+var knownNameRe = regexp.MustCompile(`^b"((?:[^"\\]|\\.)*)",$`)
+
 func genStructureTree(src, dst string) error {
 	data, err := os.ReadFile(src)
 	if err != nil {
@@ -300,10 +303,11 @@ func genStructureTree(src, dst string) error {
 	var names []string
 	for _, line := range strings.Split(block, "\n") {
 		line = strings.TrimSpace(line)
-		if !strings.HasPrefix(line, "b\"") || !strings.HasSuffix(line, "\",") {
+		m := knownNameRe.FindStringSubmatch(line)
+		if m == nil {
 			continue
 		}
-		name, err := unquoteRustString(strings.TrimSuffix(strings.TrimPrefix(line, "b\""), "\""))
+		name, err := unquoteRustString(m[1])
 		if err != nil {
 			return fmt.Errorf("%s: bad name %q: %w", src, line, err)
 		}
