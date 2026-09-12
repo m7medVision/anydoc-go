@@ -1,0 +1,7 @@
+# Binaries
+*.test
+*.out
+/anydoc-go
+
+# Local scratch
+/.scratch/
