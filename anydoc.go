@@ -61,7 +61,6 @@ type (
 	AssetID          = model.AssetID
 	Block            = model.Block
 	Cell             = model.Cell
-	Inline           = model.Inline
 	CellSlot         = model.CellSlot
 	Checkbox         = model.Checkbox
 	CodeBlock        = model.CodeBlock
@@ -72,6 +71,7 @@ type (
 	Heading          = model.Heading
 	Image            = model.Image
 	ImageSource      = model.ImageSource
+	Inline           = model.Inline
 	InlineMath       = model.InlineMath
 	LineBreak        = model.LineBreak
 	Link             = model.Link
