@@ -5,7 +5,6 @@ package formats
 
 import (
 	"bytes"
-	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -94,7 +93,7 @@ func FromBytes(data []byte) (Format, bool) {
 // FromExtension names the format an extension names (leading dot
 // optional), matched case-insensitively. False for anything unrecognized.
 func FromExtension(ext string) (Format, bool) {
-	ext = strings.ToLower(strings.TrimPrefix(ext, "."))
+	ext = asciiLower(strings.TrimPrefix(ext, "."))
 	switch ext {
 	case "doc":
 		return Doc, true
@@ -124,14 +123,46 @@ func FromExtension(ext string) (Format, bool) {
 	return Auto, false
 }
 
-// FromPath names the format a path's extension names. False when the path
-// has no extension or names nothing recognized.
+// FromPath names the format a path's extension names, with Rust
+// Path::extension semantics: trailing separators and "." components are
+// skipped, a path ending in ".." has no file name, and names that are
+// dot-only up front (".hidden") or that end in a dot ("foo.") have no
+// extension. False when the path has no extension or names nothing
+// recognized.
 func FromPath(path string) (Format, bool) {
-	ext := filepath.Ext(path)
-	if ext == "" {
+	name := pathFileName(path)
+	dot := strings.LastIndexByte(name, '.')
+	if dot <= 0 || dot == len(name)-1 {
 		return Auto, false
 	}
-	return FromExtension(ext)
+	return FromExtension(name[dot+1:])
+}
+
+// pathFileName extracts the Rust Path::file_name of a unix-style path.
+func pathFileName(path string) string {
+	parts := strings.Split(path, "/")
+	for i := len(parts) - 1; i >= 0; i-- {
+		switch parts[i] {
+		case "", ".":
+			continue
+		case "..":
+			return ""
+		default:
+			return parts[i]
+		}
+	}
+	return ""
+}
+
+// asciiLower lowercases ASCII letters only, as to_ascii_lowercase does.
+func asciiLower(s string) string {
+	buf := []byte(s)
+	for i, c := range buf {
+		if 'A' <= c && c <= 'Z' {
+			buf[i] = c + ('a' - 'A')
+		}
+	}
+	return string(buf)
 }
 
 // parseFunc parses one input format's bytes into the document model.
