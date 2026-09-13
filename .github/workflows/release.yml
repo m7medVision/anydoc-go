@@ -1,0 +1,295 @@
+# Cut a release: build and test the anydoc-ffi static archive on all four
+# supported platforms, commit the archives to main, tag that commit, and
+# publish a GitHub Release with the archives, SHA256SUMS, and generated notes.
+#
+# Nothing is committed, tagged, or published unless every build job (including
+# its `go test .` step) succeeds. See issue #33 for the design.
+name: release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Semver tag to create, e.g. v0.1.0"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+# Only one release at a time; a second dispatch queues behind the first.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+env:
+  PLATFORMS: linux_amd64 linux_arm64 darwin_amd64 darwin_arm64
+
+jobs:
+  validate:
+    name: validate version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Check version format, dispatch ref, and tag absence
+        id: check
+        env:
+          VERSION: ${{ inputs.version }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::version '$VERSION' must match v<major>.<minor>.<patch>, e.g. v0.1.0"
+            exit 1
+          fi
+          # The publish job commits to main the archives built from the
+          # dispatched ref; refuse to mix a feature branch's build into main.
+          if [[ "$REF_NAME" != "main" ]]; then
+            echo "::error::release must be dispatched from main, not '$REF_NAME'"
+            exit 1
+          fi
+          if git rev-parse -q --verify "refs/tags/$VERSION" >/dev/null; then
+            echo "::error::tag '$VERSION' already exists in the checkout"
+            exit 1
+          fi
+          if git ls-remote --exit-code --tags origin "$VERSION" >/dev/null 2>&1; then
+            echo "::error::tag '$VERSION' already exists on origin"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Releasing $VERSION"
+
+  build:
+    name: build ${{ matrix.platform }}
+    needs: validate
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - runner: ubuntu-latest
+            triple: x86_64-unknown-linux-gnu
+            platform: linux_amd64
+          - runner: ubuntu-24.04-arm
+            triple: aarch64-unknown-linux-gnu
+            platform: linux_arm64
+          - runner: macos-latest
+            triple: aarch64-apple-darwin
+            platform: darwin_arm64
+          - runner: macos-15-intel
+            triple: x86_64-apple-darwin
+            platform: darwin_amd64
+    runs-on: ${{ matrix.runner }}
+    env:
+      TRIPLE: ${{ matrix.triple }}
+      PLATFORM: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+
+      - name: Install pinned Rust toolchain
+        # native/rust-toolchain.toml pins the channel; rustup reads it when
+        # run from inside native/. `rustup target add` is a no-op on native
+        # runners where the host triple is already installed.
+        working-directory: native
+        run: |
+          set -euo pipefail
+          rustup show active-toolchain || rustup toolchain install
+          rustup target add "$TRIPLE"
+          rustc --version
+          cargo --version
+
+      - name: Build, strip, and symbol-check the archive
+        run: |
+          set -euo pipefail
+          sh native/build.sh "$TRIPLE"
+
+      - name: Test the Go package against the fresh archive
+        run: |
+          set -euo pipefail
+          go test .
+
+      - name: Show archive
+        run: |
+          set -euo pipefail
+          ls -l "native/prebuilt/$PLATFORM/libanydoc_ffi.a"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: libanydoc_ffi-${{ matrix.platform }}
+          path: native/prebuilt/${{ matrix.platform }}/libanydoc_ffi.a
+          if-no-files-found: error
+
+  publish:
+    name: commit, tag, release
+    needs: [validate, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.validate.outputs.version }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: libanydoc_ffi-*
+          merge-multiple: false
+          path: ${{ runner.temp }}/artifacts
+
+      - name: Place archives in native/prebuilt
+        run: |
+          set -euo pipefail
+          count=0
+          for dir in "$RUNNER_TEMP"/artifacts/libanydoc_ffi-*/; do
+            name=$(basename "$dir")
+            platform=${name#libanydoc_ffi-}
+            mkdir -p "native/prebuilt/$platform"
+            mv "$dir/libanydoc_ffi.a" "native/prebuilt/$platform/libanydoc_ffi.a"
+            count=$((count + 1))
+          done
+          for platform in $PLATFORMS; do
+            if [[ ! -s "native/prebuilt/$platform/libanydoc_ffi.a" ]]; then
+              echo "::error::missing archive for $platform"
+              exit 1
+            fi
+          done
+          if [[ "$count" -ne 4 ]]; then
+            echo "::error::expected 4 artifacts, found $count"
+            exit 1
+          fi
+          ls -l native/prebuilt/*/libanydoc_ffi.a
+
+      - name: Read anydoc, pdf-inspector, and rustc versions
+        id: versions
+        # Parsed from native/Cargo.lock with awk rather than `cargo metadata`:
+        # the lockfile is the authority for what was built (--locked), and
+        # awk avoids installing the pinned toolchain on this runner just to
+        # read two version strings.
+        run: |
+          set -euo pipefail
+          lock_version() {
+            awk -v pkg="$1" '
+              $0 == "[[package]]" { inpkg = 1; name = ""; next }
+              inpkg && $1 == "name" { name = $3; gsub(/"/, "", name); next }
+              inpkg && $1 == "version" && name == pkg { gsub(/"/, "", $3); print $3; exit }
+            ' native/Cargo.lock
+          }
+          anydoc=$(lock_version anydoc)
+          pdf_inspector=$(lock_version pdf-inspector)
+          rustc=$(sed -n 's/^channel[[:space:]]*=[[:space:]]*"\(.*\)"[[:space:]]*$/\1/p' native/rust-toolchain.toml)
+          for pair in "anydoc=$anydoc" "pdf-inspector=$pdf_inspector" "rustc=$rustc"; do
+            if [[ -z "${pair#*=}" ]]; then
+              echo "::error::could not determine ${pair%%=*} version"
+              exit 1
+            fi
+          done
+          {
+            echo "anydoc=$anydoc"
+            echo "pdf_inspector=$pdf_inspector"
+            echo "rustc=$rustc"
+          } >> "$GITHUB_OUTPUT"
+          echo "anydoc $anydoc, pdf-inspector $pdf_inspector, rustc $rustc"
+
+      - name: Commit archives
+        env:
+          ANYDOC: ${{ steps.versions.outputs.anydoc }}
+          PDF_INSPECTOR: ${{ steps.versions.outputs.pdf_inspector }}
+          RUSTC: ${{ steps.versions.outputs.rustc }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add native/prebuilt/*/libanydoc_ffi.a
+          if git diff --cached --quiet; then
+            echo "Archives are identical to those already on main; tagging the current commit."
+          else
+            git commit -m "Release $VERSION: prebuilt native archives (anydoc $ANYDOC, pdf-inspector $PDF_INSPECTOR, rustc $RUSTC)"
+          fi
+
+      - name: Push to main (rebase on rejection)
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if git push origin HEAD:main; then
+              exit 0
+            fi
+            echo "push rejected (attempt $attempt); rebasing onto origin/main"
+            git pull --rebase origin main
+          done
+          echo "::error::could not push to main after 3 attempts"
+          exit 1
+
+      - name: Create and push annotated tag
+        run: |
+          set -euo pipefail
+          git tag -a "$VERSION" -m "anydoc-go $VERSION"
+          git push origin "refs/tags/$VERSION"
+          git log -1 --oneline "$VERSION"
+
+      - name: Stage release assets and write SHA256SUMS
+        run: |
+          set -euo pipefail
+          stage="$RUNNER_TEMP/release"
+          mkdir -p "$stage"
+          for platform in $PLATFORMS; do
+            cp "native/prebuilt/$platform/libanydoc_ffi.a" "$stage/libanydoc_ffi-$platform.a"
+          done
+          (cd "$stage" && sha256sum libanydoc_ffi-*.a > SHA256SUMS && cat SHA256SUMS)
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ANYDOC: ${{ steps.versions.outputs.anydoc }}
+          PDF_INSPECTOR: ${{ steps.versions.outputs.pdf_inspector }}
+          RUSTC: ${{ steps.versions.outputs.rustc }}
+        run: |
+          set -euo pipefail
+          stage="$RUNNER_TEMP/release"
+          notes="$RUNNER_TEMP/notes.md"
+          {
+            echo "Prebuilt \`anydoc-ffi\` static archives for Go, built and tested on GitHub-hosted runners."
+            echo
+            echo "## Contents"
+            echo
+            echo "- anydoc \`$ANYDOC\`"
+            echo "- pdf-inspector \`$PDF_INSPECTOR\`"
+            echo "- rustc \`$RUSTC\` (pinned in \`native/rust-toolchain.toml\`)"
+            echo
+            echo "## Platforms"
+            echo
+            for platform in $PLATFORMS; do
+              echo "- \`${platform%_*}/${platform#*_}\` (\`libanydoc_ffi-$platform.a\`)"
+            done
+            echo
+            echo "## Install"
+            echo
+            echo '```'
+            echo "go get github.com/m7medVision/anydoc-go@$VERSION"
+            echo '```'
+            echo
+            echo "A C compiler (gcc, clang, or Xcode command-line tools) must be on \`PATH\`; the module uses cgo and does not build with \`CGO_ENABLED=0\`. No Rust toolchain is needed: the archives are committed in the tagged tree and served by the Go module proxy."
+            echo
+            echo "The attached \`.a\` files are the same archives that are in the module; \`SHA256SUMS\` covers them."
+          } > "$notes"
+          cat "$notes"
+          gh release create "$VERSION" \
+            "$stage"/libanydoc_ffi-*.a \
+            "$stage/SHA256SUMS" \
+            --verify-tag \
+            --title "$VERSION" \
+            --notes-file "$notes"
