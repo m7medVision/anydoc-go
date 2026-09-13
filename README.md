@@ -2,11 +2,8 @@
 
 Go bindings for [anydoc](https://github.com/firecrawl/anydoc) v0.2.4. Same engine as the Python (`firecrawl-anydoc`) and Node packages: a small C ABI around the Rust crate, not a Go rewrite of the parsers. PDF conversion uses [pdf-inspector](https://github.com/firecrawl/pdf-inspector) 1.14.2 inside that crate.
 
-Building requires cgo and a Rust toolchain (1.88+). Linux and macOS are the v1 link targets. Conversion stays on-box: this library does not call a network OCR service.
-
 ```bash
-go generate .
-go test .
+go get github.com/m7medVision/anydoc-go
 ```
 
 ```go
@@ -32,6 +29,15 @@ if errors.As(err, &ce) && ce.Code == anydoc.CodeNeedsOcr {
 }
 ```
 
+A consumer build needs cgo and a C compiler. Linux amd64 links a prebuilt native library shipped in the module, so `go get` then `go build` works without a Rust toolchain. Other GOOS/GOARCH need `go generate .` from a writable checkout (Rust 1.88+) until those prebuilts exist. Conversion stays on-box: this library does not call a network OCR service.
+
 `ToDocument` is unsupported for PDF: pdf-inspector emits Markdown directly. Use `ToMarkdown` or `ToMarkdownBytes`.
 
 Format helpers: `FormatFromBytes`, `FormatFromExtension`, `FormatFromPath`.
+
+## Contributing
+
+```bash
+go generate .
+go test .
+```

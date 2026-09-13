@@ -2,8 +2,10 @@ package anydoc
 
 /*
 #cgo CFLAGS: -I${SRCDIR}/native
-#cgo linux LDFLAGS: ${SRCDIR}/native/target/release/libanydoc_ffi.a -ldl -lm -lpthread -lstdc++
-#cgo darwin LDFLAGS: ${SRCDIR}/native/target/release/libanydoc_ffi.a -framework Security -framework SystemConfiguration -ldl -lm -lpthread
+#cgo linux,amd64 LDFLAGS: ${SRCDIR}/native/prebuilt/linux_amd64/libanydoc_ffi.a -ldl -lm -lpthread -lstdc++
+#cgo linux,arm64 LDFLAGS: ${SRCDIR}/native/prebuilt/linux_arm64/libanydoc_ffi.a -ldl -lm -lpthread -lstdc++
+#cgo darwin,amd64 LDFLAGS: ${SRCDIR}/native/prebuilt/darwin_amd64/libanydoc_ffi.a -framework Security -framework SystemConfiguration -ldl -lm -lpthread
+#cgo darwin,arm64 LDFLAGS: ${SRCDIR}/native/prebuilt/darwin_arm64/libanydoc_ffi.a -framework Security -framework SystemConfiguration -ldl -lm -lpthread
 #include "anydoc.h"
 #include <stdlib.h>
 */
