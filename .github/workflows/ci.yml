@@ -1,0 +1,86 @@
+# PR / push CI (spec #33, ticket #36).
+#
+# One Linux job that proves the Rust FFI shim still compiles with the pinned
+# toolchain and that the public Go test suite passes against a freshly built
+# archive, not the committed one. macOS and arm64 are release-only (#37).
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# One run per ref. PR runs are superseded by newer pushes to the same PR;
+# pushes to main are never cancelled so every main commit gets a verdict.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+          # The module has no dependencies and therefore no go.sum, which is
+          # the only file setup-go keys its cache on by default. Point it at
+          # go.mod instead so the Go build cache (the cgo link of the test
+          # binary) is still restored between runs.
+          cache-dependency-path: go.mod
+
+      # The toolchain is pinned by native/rust-toolchain.toml, which rustup
+      # reads when invoked from inside native/. We drive rustup from that file
+      # directly instead of using dtolnay/rust-toolchain: that action takes the
+      # channel from its own @rev (e.g. @stable) and would install a second,
+      # unpinned toolchain that cargo then ignores in favour of the file, so the
+      # file is the only source of truth worth honouring. `rustup show
+      # active-toolchain` succeeds only if the pinned toolchain is already
+      # present; otherwise `rustup toolchain install` with no argument installs
+      # exactly what the file names. `--profile minimal` skips docs/clippy and
+      # only applies when the file does not set a profile of its own.
+      - name: Install pinned Rust toolchain
+        working-directory: native
+        run: |
+          rustup show active-toolchain || rustup toolchain install --profile minimal
+          rustc --version
+          cargo --version
+
+      # Caches ~/.cargo (registry, git deps) and native/target. Must run after
+      # the toolchain step: the cache key includes every installed rustc
+      # version plus a hash of native/Cargo.{toml,lock} and
+      # native/rust-toolchain.toml.
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: native
+
+      # Runs `sh native/build.sh`: cargo build --release --locked, copy the
+      # archive to native/prebuilt/linux_amd64/, strip debug sections, and fail
+      # if any of the six exported anydoc_* symbols is missing. Cold this is a
+      # fat-LTO build of the whole anydoc dependency tree and takes a few
+      # minutes; the rust-cache hit above brings it down to the shim itself.
+      - name: Build native archive
+        run: go generate .
+
+      - name: Test
+        run: go test .
+
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "gofmt -l reports files that need formatting:"
+            echo "$unformatted"
+            echo "$unformatted" | xargs gofmt -d
+            exit 1
+          fi
