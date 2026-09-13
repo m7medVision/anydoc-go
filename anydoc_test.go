@@ -1,4 +1,4 @@
-package anydoc
+package anydoc_test
 
 import (
 	"archive/zip"
@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/m7medVision/anydoc-go"
 )
 
 func fixture(t *testing.T, name string) []byte {
@@ -29,9 +31,9 @@ func fixturePath(t *testing.T, name string) string {
 	return p
 }
 
-func convertErr(t *testing.T, err error) *ConvertError {
+func convertErr(t *testing.T, err error) *anydoc.ConvertError {
 	t.Helper()
-	var ce *ConvertError
+	var ce *anydoc.ConvertError
 	if !errors.As(err, &ce) {
 		t.Fatalf("want ConvertError, got %v", err)
 	}
@@ -39,22 +41,22 @@ func convertErr(t *testing.T, err error) *ConvertError {
 }
 
 func TestFormatFromBytes(t *testing.T) {
-	if f, ok := FormatFromBytes([]byte("%PDF-1.7\n")); !ok || f != FormatPDF {
+	if f, ok := anydoc.FormatFromBytes([]byte("%PDF-1.7\n")); !ok || f != anydoc.FormatPDF {
 		t.Fatalf("pdf header: got %q %v", f, ok)
 	}
-	if f, ok := FormatFromBytes([]byte("{\\rtf1")); !ok || f != FormatRTF {
+	if f, ok := anydoc.FormatFromBytes([]byte("{\\rtf1")); !ok || f != anydoc.FormatRTF {
 		t.Fatalf("rtf: got %q %v", f, ok)
 	}
-	if f, ok := FormatFromBytes(fixture(t, "handmade-rich.docx")); !ok || f != FormatDocx {
+	if f, ok := anydoc.FormatFromBytes(fixture(t, "handmade-rich.docx")); !ok || f != anydoc.FormatDocx {
 		t.Fatalf("docx fixture: got %q %v", f, ok)
 	}
-	if f, ok := FormatFromBytes(fixture(t, "handmade-mixed.pdf")); !ok || f != FormatPDF {
+	if f, ok := anydoc.FormatFromBytes(fixture(t, "handmade-mixed.pdf")); !ok || f != anydoc.FormatPDF {
 		t.Fatalf("pdf fixture: got %q %v", f, ok)
 	}
-	if _, ok := FormatFromBytes([]byte("a,b\n1,2\n")); ok {
+	if _, ok := anydoc.FormatFromBytes([]byte("a,b\n1,2\n")); ok {
 		t.Fatal("csv must not detect from bytes")
 	}
-	if _, ok := FormatFromBytes(fixture(t, "sheet.csv")); ok {
+	if _, ok := anydoc.FormatFromBytes(fixture(t, "sheet.csv")); ok {
 		t.Fatal("csv fixture must not detect from bytes")
 	}
 }
@@ -62,37 +64,37 @@ func TestFormatFromBytes(t *testing.T) {
 func TestFormatFromExtensionAndPath(t *testing.T) {
 	cases := []struct {
 		ext    string
-		format Format
+		format anydoc.Format
 	}{
-		{".pptm", FormatPPTX},
-		{"ppsx", FormatPPTX},
-		{".docm", FormatDocx},
-		{"xls", FormatXLSX},
-		{".xlsb", FormatXLSX},
-		{"xlsm", FormatXLSX},
+		{".pptm", anydoc.FormatPPTX},
+		{"ppsx", anydoc.FormatPPTX},
+		{".docm", anydoc.FormatDocx},
+		{"xls", anydoc.FormatXLSX},
+		{".xlsb", anydoc.FormatXLSX},
+		{"xlsm", anydoc.FormatXLSX},
 	}
 	for _, tc := range cases {
-		f, ok := FormatFromExtension(tc.ext)
+		f, ok := anydoc.FormatFromExtension(tc.ext)
 		if !ok || f != tc.format {
 			t.Fatalf("%s: got %q %v, want %q", tc.ext, f, ok, tc.format)
 		}
 	}
-	if f, ok := FormatFromPath("report.odt"); !ok || f != FormatOdt {
+	if f, ok := anydoc.FormatFromPath("report.odt"); !ok || f != anydoc.FormatOdt {
 		t.Fatalf("odt path: got %q %v", f, ok)
 	}
-	if _, ok := FormatFromPath("report.unknown"); ok {
+	if _, ok := anydoc.FormatFromPath("report.unknown"); ok {
 		t.Fatal("unknown path should not match")
 	}
 }
 
 func TestCSVMarkdownAndDocument(t *testing.T) {
 	data := []byte("name,qty\nwidgets,3\n")
-	_, err := ToMarkdownBytes(data, "")
-	if convertErr(t, err).Code != CodeUnsupported {
+	_, err := anydoc.ToMarkdownBytes(data, "")
+	if convertErr(t, err).Code != anydoc.CodeUnsupported {
 		t.Fatalf("unnamed csv: got %v", err)
 	}
 
-	md, err := ToMarkdownBytes(data, FormatCSV)
+	md, err := anydoc.ToMarkdownBytes(data, anydoc.FormatCSV)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -100,7 +102,7 @@ func TestCSVMarkdownAndDocument(t *testing.T) {
 		t.Fatalf("expected a markdown table, got %q", md)
 	}
 
-	doc, err := ToDocument(data, FormatCSV)
+	doc, err := anydoc.ToDocument(data, anydoc.FormatCSV)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -114,11 +116,11 @@ func TestCSVMarkdownAndDocument(t *testing.T) {
 
 func TestCSVFixtureRequiresNamedFormat(t *testing.T) {
 	data := fixture(t, "sheet.csv")
-	_, err := ToMarkdownBytes(data, "")
-	if convertErr(t, err).Code != CodeUnsupported {
+	_, err := anydoc.ToMarkdownBytes(data, "")
+	if convertErr(t, err).Code != anydoc.CodeUnsupported {
 		t.Fatalf("unnamed csv fixture: got %v", err)
 	}
-	md, err := ToMarkdownBytes(data, FormatCSV)
+	md, err := anydoc.ToMarkdownBytes(data, anydoc.FormatCSV)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -133,7 +135,7 @@ func TestToMarkdownPath(t *testing.T) {
 	if err := os.WriteFile(path, []byte("a,b\n1,2\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	md, err := ToMarkdown(path)
+	md, err := anydoc.ToMarkdown(path)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -141,7 +143,7 @@ func TestToMarkdownPath(t *testing.T) {
 		t.Fatalf("got %q", md)
 	}
 
-	outline, err := ToMarkdown(fixturePath(t, "handmade-outline.docx"))
+	outline, err := anydoc.ToMarkdown(fixturePath(t, "handmade-outline.docx"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -152,7 +154,7 @@ func TestToMarkdownPath(t *testing.T) {
 
 func TestOfficeMarkdownAndDocument(t *testing.T) {
 	rich := fixture(t, "handmade-rich.docx")
-	md, err := ToMarkdownBytes(rich, "")
+	md, err := anydoc.ToMarkdownBytes(rich, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -160,7 +162,7 @@ func TestOfficeMarkdownAndDocument(t *testing.T) {
 		t.Fatalf("rich markdown: %q", md)
 	}
 
-	named, err := ToMarkdownBytes(rich, FormatDocx)
+	named, err := anydoc.ToMarkdownBytes(rich, anydoc.FormatDocx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -169,11 +171,11 @@ func TestOfficeMarkdownAndDocument(t *testing.T) {
 	}
 
 	outline := fixture(t, "handmade-outline.docx")
-	doc, err := ToDocument(outline, FormatDocx)
+	doc, err := anydoc.ToDocument(outline, anydoc.FormatDocx)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var heading *Block
+	var heading *anydoc.Block
 	for i := range doc.Blocks {
 		if doc.Blocks[i].Kind == "heading" {
 			heading = &doc.Blocks[i]
@@ -196,7 +198,7 @@ func TestOfficeMarkdownAndDocument(t *testing.T) {
 		t.Fatal("heading text missing style")
 	}
 
-	richDoc, err := ToDocument(rich, FormatDocx)
+	richDoc, err := anydoc.ToDocument(rich, anydoc.FormatDocx)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -213,9 +215,9 @@ func TestOfficeMarkdownAndDocument(t *testing.T) {
 }
 
 func TestPDFToDocumentUnsupported(t *testing.T) {
-	_, err := ToDocument(fixture(t, "handmade-mixed.pdf"), FormatPDF)
+	_, err := anydoc.ToDocument(fixture(t, "handmade-mixed.pdf"), anydoc.FormatPDF)
 	ce := convertErr(t, err)
-	if ce.Code != CodeUnsupported {
+	if ce.Code != anydoc.CodeUnsupported {
 		t.Fatalf("got %v", err)
 	}
 	msg := strings.ToLower(ce.Message)
@@ -225,9 +227,9 @@ func TestPDFToDocumentUnsupported(t *testing.T) {
 }
 
 func TestPDFNeedsOCR(t *testing.T) {
-	_, err := ToMarkdown(fixturePath(t, "handmade-mixed.pdf"))
+	_, err := anydoc.ToMarkdown(fixturePath(t, "handmade-mixed.pdf"))
 	ce := convertErr(t, err)
-	if ce.Code != CodeNeedsOcr {
+	if ce.Code != anydoc.CodeNeedsOcr {
 		t.Fatalf("got %v", err)
 	}
 	if ce.PageCount != 2 {
@@ -239,16 +241,16 @@ func TestPDFNeedsOCR(t *testing.T) {
 }
 
 func TestEncryptedODT(t *testing.T) {
-	_, err := ToMarkdownBytes(fixture(t, "encrypted--errors.odt"), FormatOdt)
-	if convertErr(t, err).Code != CodeEncrypted {
+	_, err := anydoc.ToMarkdownBytes(fixture(t, "encrypted--errors.odt"), anydoc.FormatOdt)
+	if convertErr(t, err).Code != anydoc.CodeEncrypted {
 		t.Fatalf("got %v", err)
 	}
 }
 
 func TestZipBombResourceLimit(t *testing.T) {
-	_, err := ToMarkdownBytes(fixture(t, "zipbomb--errors.docx"), FormatDocx)
+	_, err := anydoc.ToMarkdownBytes(fixture(t, "zipbomb--errors.docx"), anydoc.FormatDocx)
 	ce := convertErr(t, err)
-	if ce.Code != CodeResourceLimit {
+	if ce.Code != anydoc.CodeResourceLimit {
 		t.Fatalf("got %v", err)
 	}
 	if ce.Limit != "max_entry_bytes" {
@@ -269,9 +271,9 @@ func TestMissingPartDocx(t *testing.T) {
 	if err := zw.Close(); err != nil {
 		t.Fatal(err)
 	}
-	_, err = ToMarkdownBytes(buf.Bytes(), FormatDocx)
+	_, err = anydoc.ToMarkdownBytes(buf.Bytes(), anydoc.FormatDocx)
 	ce := convertErr(t, err)
-	if ce.Code != CodeMissingPart {
+	if ce.Code != anydoc.CodeMissingPart {
 		t.Fatalf("got %v", err)
 	}
 	if ce.Part != "word/document.xml" {
@@ -280,27 +282,27 @@ func TestMissingPartDocx(t *testing.T) {
 }
 
 func TestMalformedNamedFormat(t *testing.T) {
-	_, err := ToMarkdownBytes([]byte("not a document"), FormatDocx)
+	_, err := anydoc.ToMarkdownBytes([]byte("not a document"), anydoc.FormatDocx)
 	ce := convertErr(t, err)
-	if ce.Code != CodeMalformed {
+	if ce.Code != anydoc.CodeMalformed {
 		t.Fatalf("got %v", err)
 	}
 }
 
 func TestUnknownFormatName(t *testing.T) {
-	_, err := ToMarkdownBytes([]byte("x"), Format("nope"))
+	_, err := anydoc.ToMarkdownBytes([]byte("x"), anydoc.Format("nope"))
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	var ce *ConvertError
+	var ce *anydoc.ConvertError
 	if errors.As(err, &ce) {
 		t.Fatalf("unknown format should not be ConvertError, got %v", ce)
 	}
 }
 
 func TestMissingFile(t *testing.T) {
-	_, err := ToMarkdown("/no/such/file/anydoc-go-missing.doc")
-	if convertErr(t, err).Code != CodeIO {
+	_, err := anydoc.ToMarkdown("/no/such/file/anydoc-go-missing.doc")
+	if convertErr(t, err).Code != anydoc.CodeIO {
 		t.Fatalf("got %v", err)
 	}
 }
@@ -314,12 +316,12 @@ func TestConcurrentConverts(t *testing.T) {
 		wg.Add(2)
 		go func() {
 			defer wg.Done()
-			_, err := ToMarkdownBytes(data, "")
+			_, err := anydoc.ToMarkdownBytes(data, "")
 			errs <- err
 		}()
 		go func() {
 			defer wg.Done()
-			_, err := ToDocument(data, FormatDocx)
+			_, err := anydoc.ToDocument(data, anydoc.FormatDocx)
 			errs <- err
 		}()
 	}

@@ -163,6 +163,8 @@ pub unsafe extern "C" fn anydoc_format_from_bytes(
     len: usize,
     out_format: *mut *mut c_char,
 ) -> i32 {
+    // Panic must not unwind into Go. Detection has no ConvertError return, so
+    // a panic is reported as unrecognized (the same as a failed detect).
     let result = std::panic::catch_unwind(|| anydoc::Format::from_bytes(bytes(data, len)));
     match result {
         Ok(format) => {
@@ -178,13 +180,19 @@ pub unsafe extern "C" fn anydoc_format_from_extension(
     extension: *const c_char,
     out_format: *mut *mut c_char,
 ) -> i32 {
-    let Some(ext) = cstr_opt(extension) else {
-        write_format(out_format, None);
-        return 1;
-    };
-    let trimmed = ext.trim_start_matches('.');
-    write_format(out_format, anydoc::Format::from_extension(trimmed));
-    1
+    // Format helpers have no error channel (they match Python's Optional).
+    // A panic must not unwind into Go; it is reported as unrecognized.
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        cstr_opt(extension)
+            .and_then(|ext| anydoc::Format::from_extension(ext.trim_start_matches('.')))
+    }));
+    match result {
+        Ok(format) => {
+            write_format(out_format, format);
+            1
+        }
+        Err(_) => 0,
+    }
 }
 
 #[no_mangle]
@@ -192,12 +200,16 @@ pub unsafe extern "C" fn anydoc_format_from_path(
     path: *const c_char,
     out_format: *mut *mut c_char,
 ) -> i32 {
-    let Some(path) = cstr_opt(path) else {
-        write_format(out_format, None);
-        return 1;
-    };
-    write_format(out_format, anydoc::Format::from_path(Path::new(path)));
-    1
+    let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        cstr_opt(path).and_then(|path| anydoc::Format::from_path(Path::new(path)))
+    }));
+    match result {
+        Ok(format) => {
+            write_format(out_format, format);
+            1
+        }
+        Err(_) => 0,
+    }
 }
 
 #[no_mangle]
