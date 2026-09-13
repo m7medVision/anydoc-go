@@ -43,32 +43,52 @@ else
 	platform="${goos}_${goarch}"
 fi
 
+# The archive's object format decides how it is stripped and inspected, so
+# derive the OS from the target triple when one was given and from the host
+# otherwise. Only linux and darwin are supported (see the triple table above).
+case "$triple" in
+*-apple-darwin) os=darwin ;;
+*-linux-*) os=linux ;;
+*)
+	case "$(uname -s)" in
+	Darwin) os=darwin ;;
+	*) os=linux ;;
+	esac
+	;;
+esac
+case "$os" in
+darwin)
+	# Apple's strip is not GNU and has no --strip-debug; -S is its equivalent
+	# (strip debugging symbols only). Using the system tool avoids depending on
+	# xcrun/llvm-strip being on PATH. Apple nm has no --defined-only but still
+	# prints defined text symbols as ' T '. Mach-O prefixes C symbols with an
+	# underscore, so anydoc_to_markdown is listed as _anydoc_to_markdown.
+	strip_cmd="strip -S"
+	nm_cmd="nm"
+	sym_prefix="_"
+	;;
+*)
+	strip_cmd="strip --strip-debug"
+	nm_cmd="nm --defined-only"
+	sym_prefix=""
+	;;
+esac
+
 dest="$(pwd)/prebuilt/$platform"
 archive="$dest/libanydoc_ffi.a"
 mkdir -p "$dest"
 cp "$built" "$archive"
 
 # Drop debug sections but keep every symbol so the cgo link still resolves.
-# Apple's strip is not GNU and has no --strip-debug; -S is its equivalent
-# (strip debugging symbols only). Using the system tool avoids depending on
-# xcrun/llvm-strip being on PATH.
-case "$(uname -s)" in
-Darwin) strip -S "$archive" ;;
-*) strip --strip-debug "$archive" ;;
-esac
+$strip_cmd "$archive"
 
-# Verify the exported C ABI survived the strip. On Linux, --defined-only keeps
-# the listing to symbols defined in the archive; Apple nm has no such flag but
-# still prints defined text symbols as ' T '.
-case "$(uname -s)" in
-Darwin) symbols=$(nm "$archive" 2>/dev/null | grep ' T anydoc_' || true) ;;
-*) symbols=$(nm --defined-only "$archive" 2>/dev/null | grep ' T anydoc_' || true) ;;
-esac
+# Verify the exported C ABI survived the strip.
+symbols=$($nm_cmd "$archive" 2>/dev/null | grep " T ${sym_prefix}anydoc_" || true)
 missing=0
 for sym in anydoc_to_markdown anydoc_to_markdown_bytes anydoc_to_document_json \
 	anydoc_format_from_bytes anydoc_string_free anydoc_error_free; do
-	if printf '%s\n' "$symbols" | grep -q " T ${sym}\$"; then
-		printf '%s\n' "$symbols" | grep " T ${sym}\$" | head -n 1
+	if printf '%s\n' "$symbols" | grep -q " T ${sym_prefix}${sym}\$"; then
+		printf '%s\n' "$symbols" | grep " T ${sym_prefix}${sym}\$" | head -n 1
 	else
 		echo "build.sh: missing exported symbol $sym" >&2
 		missing=1

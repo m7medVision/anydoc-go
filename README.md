@@ -33,11 +33,11 @@ if errors.As(err, &ce) && ce.Code == anydoc.CodeNeedsOcr {
 
 A consumer build needs cgo and a C compiler (gcc or clang; on macOS the Xcode command line tools). Setting `CGO_ENABLED=0` disables cgo and this module will not build; leave it at the default. No Rust toolchain is needed.
 
-Prebuilt native archives ship in the module for linux/amd64, linux/arm64, darwin/amd64 and darwin/arm64 (glibc on Linux). On those platforms `go get` then `go build` is the whole install. The arm64 and darwin archives are added by the release workflow; until the first tagged release only linux/amd64 is present.
+Prebuilt native archives ship in the module for linux/amd64, linux/arm64, darwin/amd64 and darwin/arm64 (glibc on Linux). On those platforms `go get` then `go build` is the whole install. Depend on a tagged version (`go get github.com/m7medVision/anydoc-go@vX.Y.Z`): archives for all four platforms are committed by the release workflow when a tag is cut, so an untagged `main` may have fewer.
 
 The module wraps anydoc 0.2.4 and pdf-inspector 1.14.2. Releases of this module use their own semver, independent of anydoc's version.
 
-musl/Alpine and Windows are not v1 targets. On an unsupported platform the link step fails naming the missing archive for your GOOS/GOARCH. To use the library there anyway:
+musl/Alpine and Windows are not v1 targets. On an unsupported GOOS/GOARCH the build fails at link time (undefined `anydoc_*` references, or a missing archive path). To use the library there anyway:
 
 1. Clone this repo.
 2. Install Rust. The pinned version is in `native/rust-toolchain.toml`; 1.88 is the floor.
@@ -59,4 +59,4 @@ go test .
 
 `go generate .` rebuilds the Rust shim for the host platform (Rust required, see above). `go test .` runs the suite against that archive. PR CI (the `ci` workflow) does the same on Linux.
 
-Archives for all four platforms are produced by the `release` GitHub Actions workflow. It is run by hand (`workflow_dispatch`) with a version, builds and tests each archive on a runner of its own OS and architecture, commits the archives, tags, and publishes a GitHub Release with the archives and a `SHA256SUMS` file. Do not hand-commit archives, including the one `go generate .` leaves in `native/prebuilt/`.
+Archives for all four platforms are produced by the `release` GitHub Actions workflow. It is run by hand (`workflow_dispatch`) with a version, builds and tests each archive on a runner of its own OS and architecture, commits the archives, tags, and publishes a GitHub Release with the archives and a `SHA256SUMS` file. Releases use their own semver, independent of anydoc's version. Do not hand-commit archives, including the one `go generate .` leaves in `native/prebuilt/`.

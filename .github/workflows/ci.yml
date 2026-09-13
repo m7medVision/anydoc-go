@@ -52,6 +52,7 @@ jobs:
       - name: Install pinned Rust toolchain
         working-directory: native
         run: |
+          set -euo pipefail
           rustup show active-toolchain || rustup toolchain install --profile minimal
           rustc --version
           cargo --version
@@ -66,17 +67,22 @@ jobs:
 
       # Runs `sh native/build.sh`: cargo build --release --locked, copy the
       # archive to native/prebuilt/linux_amd64/, strip debug sections, and fail
-      # if any of the six exported anydoc_* symbols is missing. Cold this is a
+      # if any of the exported anydoc_* symbols is missing. Cold this is a
       # fat-LTO build of the whole anydoc dependency tree and takes a few
       # minutes; the rust-cache hit above brings it down to the shim itself.
       - name: Build native archive
-        run: go generate .
+        run: |
+          set -euo pipefail
+          go generate .
 
       - name: Test
-        run: go test .
+        run: |
+          set -euo pipefail
+          go test .
 
       - name: gofmt
         run: |
+          set -euo pipefail
           unformatted=$(gofmt -l .)
           if [ -n "$unformatted" ]; then
             echo "gofmt -l reports files that need formatting:"
