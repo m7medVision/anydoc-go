@@ -2,6 +2,7 @@
 name = "anydoc-ffi"
 version = "0.2.4"
 edition = "2021"
+rust-version = "1.88"
 publish = false
 license = "MIT"
 description = "C ABI for Go bindings to anydoc 0.2.4"
