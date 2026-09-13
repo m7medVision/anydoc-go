@@ -186,12 +186,6 @@ func TestStatementTableRowsKeepLabelAndValues(t *testing.T) {
 }
 
 func TestStatementLabelsHaveNoMidWordSpaces(t *testing.T) {
-	t.Skip("known rendering defect: per-glyph text whose hinted advances run wider " +
-		"than the declared widths splits capitalised words after wide glyphs. " +
-		`Actual: "|LIAB ILITIES|||", "|EQ UITY|||", "**STATEMENT OF CHANG ES IN EQ UITY**", ` +
-		`"**G ENERAL INFORMATION AB OUT FINANCIAL STATEMENTS**". ` +
-		`Expected: "LIABILITIES", "EQUITY", "STATEMENT OF CHANGES IN EQUITY", "GENERAL INFORMATION ABOUT FINANCIAL STATEMENTS".`)
-
 	statement := pages(t, "statement-twopage.pdf")
 	keyValue := pages(t, "statement-keyvalue.pdf")
 	checks := []struct {
@@ -216,29 +210,41 @@ func TestStatementLabelsHaveNoMidWordSpaces(t *testing.T) {
 }
 
 func TestStatementPeriodHeaderCells(t *testing.T) {
-	t.Skip("known rendering defect: two-line column titles and two-line period ranges stacked " +
-		"in one header are merged into shared lines and interleaved glyph by glyph. " +
-		`Actual page 2 header: "**(accumulated losses) (0d1e/0fi1c/i2t0)25-(accumulated losses) (0d1e/0fi1c/i2t0)24-**" ` +
-		`and "**01/01/2025-01/01/2025-01/01/2024-01/01/2024-**", outside any table. ` +
-		`Expected one header row whose period cells read 01/01/2025-31/12/2025 (four columns) then 01/01/2024-31/12/2024 (four columns).`)
-
 	got := pages(t, "statement-twopage.pdf")[1].Markdown
-	want := strings.Repeat("|01/01/2025-31/12/2025", 4) + strings.Repeat("|01/01/2024-31/12/2024", 4) + "|"
-	for _, line := range strings.Split(got, "\n") {
-		if strings.HasSuffix(strings.ReplaceAll(line, " ", ""), want) {
-			return
+	for _, bad := range []string{"0d1e", "01/01/2025-01/01/2025-", "01/01/2024-01/01/2024-"} {
+		if strings.Contains(strings.ReplaceAll(got, " ", ""), bad) {
+			t.Errorf("interleaved header text %q\n%s", bad, got)
 		}
 	}
-	t.Fatalf("no header row with period cells %s\n%s", want, got)
+	lines := strings.Split(got, "\n")
+	header := -1
+	for i := 1; i < len(lines); i++ {
+		if strings.HasPrefix(lines[i], "|---|") {
+			if header != -1 {
+				t.Fatalf("more than one table header row\n%s", got)
+			}
+			header = i - 1
+		}
+	}
+	if header == -1 {
+		t.Fatalf("no table header row\n%s", got)
+	}
+	cells := strings.Split(strings.Trim(lines[header], "|"), "|")
+	want := []string{
+		"01/01/2025-31/12/2025", "01/01/2025-31/12/2025", "01/01/2025-31/12/2025", "01/01/2025-31/12/2025",
+		"01/01/2024-31/12/2024", "01/01/2024-31/12/2024", "01/01/2024-31/12/2024", "01/01/2024-31/12/2024",
+	}
+	if len(cells) != len(want)+1 {
+		t.Fatalf("header has %d cells, want %d: %s", len(cells), len(want)+1, lines[header])
+	}
+	for i, period := range want {
+		if !strings.HasSuffix(strings.TrimSpace(cells[i+1]), period) {
+			t.Errorf("header cell %d = %q, want it to end with %s", i+1, cells[i+1], period)
+		}
+	}
 }
 
 func TestKeyValuePageKeepsLabelsWithValues(t *testing.T) {
-	t.Skip("known rendering defect: on a two-column key/value page with one label wider than " +
-		"the label column, labels and values are emitted as separate column paragraphs. " +
-		`Actual: "Type of entity Registration number Name of reporting entity ..." followed later by ` +
-		`"Public company 2019/0442 ACME HOLDINGS AC-4417 ...". ` +
-		`Expected each field on its own row, e.g. "|Name of reporting entity|ACME HOLDINGS|".`)
-
 	got := pages(t, "statement-keyvalue.pdf")
 	if len(got) != 1 {
 		t.Fatalf("page count: %d", len(got))
