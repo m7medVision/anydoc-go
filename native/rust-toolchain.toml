@@ -1,0 +1,4 @@
+# Exact stable rustc that built the committed prebuilt archives. Bump
+# deliberately (and rebuild every archive), never float to "stable".
+[toolchain]
+channel = "1.98.1"
