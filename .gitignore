@@ -1,0 +1,10 @@
+# Binaries
+*.test
+*.out
+/anydoc-go
+
+# Local scratch
+/.scratch/
+
+# Rust build of the anydoc FFI crate (rebuilt by go generate)
+/native/target/
