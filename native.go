@@ -141,3 +141,22 @@ func toDocument(data []byte, format Format) (Document, error) {
 	}
 	return doc, nil
 }
+
+func toPagesBytes(data []byte, format Format) ([]Page, error) {
+	ptr, n := cBytes(data)
+	var cformat *C.char
+	if format != "" {
+		cformat = C.CString(string(format))
+		defer C.free(unsafe.Pointer(cformat))
+	}
+	var out *C.char
+	var err C.anydoc_error
+	if C.anydoc_pdf_pages_json(ptr, n, cformat, &out, &err) != 1 {
+		return nil, takeError(&err)
+	}
+	var pages []Page
+	if e := json.Unmarshal([]byte(takeString(out)), &pages); e != nil {
+		return nil, &ConvertError{Code: CodeMalformed, Message: "pages json: " + e.Error()}
+	}
+	return pages, nil
+}

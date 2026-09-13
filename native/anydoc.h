@@ -30,6 +30,8 @@ int anydoc_format_from_path(const char *path, char **out_format);
 int anydoc_to_markdown(const char *path, char **out_md, anydoc_error *err);
 int anydoc_to_markdown_bytes(const uint8_t *data, size_t len, const char *format, char **out_md, anydoc_error *err);
 int anydoc_to_document_json(const uint8_t *data, size_t len, const char *format, char **out_json, anydoc_error *err);
+/* PDF only. out_json is a JSON array of {"number", "markdown"} in page order. */
+int anydoc_pdf_pages_json(const uint8_t *data, size_t len, const char *format, char **out_json, anydoc_error *err);
 
 #ifdef __cplusplus
 }

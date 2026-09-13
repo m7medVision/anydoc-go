@@ -86,7 +86,7 @@ $strip_cmd "$archive"
 symbols=$($nm_cmd "$archive" 2>/dev/null | grep " T ${sym_prefix}anydoc_" || true)
 missing=0
 for sym in anydoc_to_markdown anydoc_to_markdown_bytes anydoc_to_document_json \
-	anydoc_format_from_bytes anydoc_string_free anydoc_error_free; do
+	anydoc_format_from_bytes anydoc_pdf_pages_json anydoc_string_free anydoc_error_free; do
 	if printf '%s\n' "$symbols" | grep -q " T ${sym_prefix}${sym}\$"; then
 		printf '%s\n' "$symbols" | grep " T ${sym_prefix}${sym}\$" | head -n 1
 	else
