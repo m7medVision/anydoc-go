@@ -9,9 +9,9 @@ Versions inside this module:
 | Crate | Version |
 | --- | --- |
 | anydoc | 0.2.4 |
-| pdf-inspector | 1.19.0 |
+| pdf-inspector | 1.19.0 ([fork](https://github.com/m7medVision/pdf-inspector/commit/b30fee8de023c9908b123dfe0f835d64e982117d)) |
 
-anydoc 0.2.4 asks for pdf-inspector 1.14.2 or any later 1.x. This module pins 1.19.0, the newest release, for its PDF extraction fixes, so PDF Markdown can differ slightly from the official packages.
+anydoc 0.2.4 asks for pdf-inspector 1.14.2 or any later 1.x. This module builds against a pinned fork of pdf-inspector 1.19.0 that carries PDF layout fixes pending upstream (split words, stacked table headers, key/value rows), so PDF Markdown can differ from the official packages.
 
 ## Install
 

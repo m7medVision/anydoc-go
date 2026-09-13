@@ -790,8 +790,7 @@ checksum = "384b8ab6d37215f3c5301a95a4accb5d64aa607f1fcb26a11b5303878451b4fe"
 [[package]]
 name = "pdf-inspector"
 version = "1.19.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "41991cc4e52ee180591b21c4871b5fb5947ff1cc6898df9db2d04ef34c254c8d"
+source = "git+https://github.com/m7medVision/pdf-inspector?rev=b30fee8de023c9908b123dfe0f835d64e982117d#b30fee8de023c9908b123dfe0f835d64e982117d"
 dependencies = [
  "env_logger",
  "include_dir",
