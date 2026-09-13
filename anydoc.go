@@ -2,7 +2,9 @@
 //
 // These are Go bindings for the anydoc 0.2.4 Rust crate (the same engine
 // as the Python and Node packages). PDF conversion uses pdf-inspector
-// 1.14.2 inside that crate. Building requires cgo and a Rust toolchain.
+// 1.14.2 inside that crate. Building requires cgo and a C compiler.
+// Prebuilt native archives ship in the module for the supported
+// platforms; Rust is only needed to rebuild the shim via go generate.
 package anydoc
 
 import "fmt"
