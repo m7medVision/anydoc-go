@@ -6,6 +6,7 @@ use std::ptr;
 use std::slice;
 
 mod document;
+mod pages;
 
 const FORMATS: &[(&str, anydoc::Format)] = &[
     ("doc", anydoc::Format::Doc),
@@ -297,6 +298,43 @@ pub unsafe extern "C" fn anydoc_to_document_json(
             serde_json::to_string(&document::DocumentOut::from(doc))
                 .expect("document json is utf-8")
         })
+    })) {
+        Ok(Ok(json)) => {
+            if !out_json.is_null() {
+                *out_json = cstring(json);
+            }
+            1
+        }
+        Ok(Err(e)) => {
+            fill_error(err, e);
+            0
+        }
+        Err(_) => {
+            fill_message(err, "malformed", "internal panic during conversion");
+            0
+        }
+    }
+}
+
+#[no_mangle]
+pub unsafe extern "C" fn anydoc_pdf_pages_json(
+    data: *const u8,
+    len: usize,
+    format: *const c_char,
+    out_json: *mut *mut c_char,
+    err: *mut AnydocError,
+) -> i32 {
+    let format = match named_format(format) {
+        Ok(f) => f,
+        Err(msg) => {
+            fill_message(err, "unsupported", msg);
+            return 0;
+        }
+    };
+    let input = bytes(data, len).to_vec();
+    match std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        pages::to_pages(&input, format)
+            .map(|pages| serde_json::to_string(&pages).expect("pages json is utf-8"))
     })) {
         Ok(Ok(json)) => {
             if !out_json.is_null() {

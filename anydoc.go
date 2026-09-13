@@ -2,7 +2,7 @@
 //
 // These are Go bindings for the anydoc 0.2.4 Rust crate (the same engine
 // as the Python and Node packages). PDF conversion uses pdf-inspector
-// 1.14.2 inside that crate. Building requires cgo and a C compiler.
+// 1.19.0. Building requires cgo and a C compiler.
 // Prebuilt native archives ship in the module for the supported
 // platforms; Rust is only needed to rebuild the shim via go generate.
 package anydoc
@@ -91,6 +91,28 @@ func ToMarkdownBytes(data []byte, format Format) (string, error) {
 		}
 	}
 	return toMarkdownBytes(data, format)
+}
+
+// Page is one page of a PDF converted to Markdown.
+type Page struct {
+	Number   int // 1-indexed, as a PDF viewer counts
+	Markdown string
+}
+
+// ToPagesBytes converts an in-memory PDF to Markdown one page at a time,
+// returning every page in document order, including pages with no text.
+// Without a format (the empty string), it is detected from the content;
+// any format other than PDF is a ConvertError with Code unsupported.
+//
+// It fails on the same inputs as ToMarkdownBytes, with the same codes: a
+// document with any page that needs OCR fails as a whole with needsOcr.
+func ToPagesBytes(data []byte, format Format) ([]Page, error) {
+	if format != "" {
+		if _, err := parseFormat(string(format)); err != nil {
+			return nil, err
+		}
+	}
+	return toPagesBytes(data, format)
 }
 
 // ToDocument parses an in-memory document into the document model, which
